@@ -12,12 +12,13 @@ use super::app::{App, Panel};
 
 /// Renders the entire dashboard.
 pub fn render(frame: &mut Frame, app: &App) {
+    // 4-panel layout: Header, Main (Today | Timeline | Week), Footer
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Header
             Constraint::Min(5),    // Main area
-            Constraint::Length(1), // Footer
+            Constraint::Length(3), // Footer
         ])
         .split(frame.area());
 
@@ -58,15 +59,20 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(header, area);
 }
 
-/// Renders the main content area with today's entries and week totals.
+/// Renders the main content area with today's entries, timeline, and week totals.
 fn render_main(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+        ])
         .split(area);
 
     render_today(frame, app, chunks[0]);
-    render_week(frame, app, chunks[1]);
+    render_timeline(frame, app, chunks[1]);
+    render_week(frame, app, chunks[2]);
 }
 
 /// Renders today's entries panel.
@@ -129,6 +135,19 @@ fn render_today(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, area);
 }
 
+/// Renders the timeline panel.
+fn render_timeline(frame: &mut Frame, app: &App, area: Rect) {
+    let is_focused = app.selected_panel == Panel::Timeline;
+    super::timeline::render_timeline(
+        frame,
+        area,
+        app.timeline_entries(),
+        app.timeline_scroll,
+        app.timeline_view,
+        is_focused,
+    );
+}
+
 /// Renders the weekly project totals panel.
 fn render_week(frame: &mut Frame, app: &App, area: Rect) {
     let border_style = if app.selected_panel == Panel::Week {
@@ -185,7 +204,11 @@ fn render_footer(frame: &mut Frame, area: Rect) {
         Span::styled("tab", Style::default().fg(Color::Yellow)),
         Span::raw(":switch  "),
         Span::styled("\u{2191}\u{2193}", Style::default().fg(Color::Yellow)),
-        Span::raw(":scroll"),
+        Span::raw(":scroll  "),
+        Span::styled("y", Style::default().fg(Color::Yellow)),
+        Span::raw(":yesterday  "),
+        Span::styled("t", Style::default().fg(Color::Yellow)),
+        Span::raw(":today"),
     ]));
     frame.render_widget(footer, area);
 }

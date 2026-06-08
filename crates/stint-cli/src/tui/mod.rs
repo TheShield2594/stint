@@ -1,6 +1,7 @@
 //! Interactive TUI dashboard for Stint.
 
 mod app;
+mod timeline;
 mod ui;
 
 use std::io;
@@ -72,6 +73,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                     (KeyCode::Char('c'), KeyModifiers::CONTROL) => app.should_quit = true,
                     (KeyCode::Tab, _) | (KeyCode::BackTab, _) => {
                         app.selected_panel = app.selected_panel.next();
+                    }
+                    (KeyCode::Char('y'), _) => {
+                        app.selected_panel = app::Panel::Timeline;
+                        app.toggle_timeline_view();
+                    }
+                    (KeyCode::Char('t'), _) => {
+                        app.selected_panel = app::Panel::Timeline;
+                        if !app.is_timeline_today() {
+                            app.toggle_timeline_view();
+                        }
                     }
                     (KeyCode::Up, _) => app.scroll_up(),
                     (KeyCode::Down, _) => app.scroll_down(),
