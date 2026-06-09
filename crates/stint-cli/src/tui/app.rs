@@ -137,7 +137,8 @@ impl App {
         }
         self.week_totals = totals.into_iter().collect();
         // Sort by total descending
-        self.week_totals.sort_by(|a, b| b.1.cmp(&a.1));
+        self.week_totals
+            .sort_by_key(|(_, total)| std::cmp::Reverse(*total));
     }
 
     /// Scrolls the focused panel up.
