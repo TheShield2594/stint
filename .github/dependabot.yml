@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Keep workflow actions on current majors so runtime deprecations
+  # (e.g. the Node 20 removal, issue #24) surface as PRs instead of
+  # release-time warnings.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
