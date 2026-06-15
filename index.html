@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stint — Terminal-Native Time Tracker</title>
+  <meta name="description" content="Stint is an open-source, local-first time tracker built in Rust. Automatic time tracking via shell hooks — no timers to start, no buttons to click.">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #7ee787;
+      --link: #58a6ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+      line-height: 1.6;
+      padding: 2rem 1rem 4rem;
+    }
+    main { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 2rem; margin-bottom: 0.75rem; }
+    h1::after {
+      content: "";
+      display: inline-block;
+      width: 0.6em;
+      height: 1.1em;
+      margin-left: 0.15em;
+      background: var(--accent);
+      vertical-align: text-bottom;
+      animation: blink 1.1s steps(1) infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    blockquote {
+      color: var(--muted);
+      border-left: 3px solid var(--accent);
+      padding-left: 1rem;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: 1.2rem; color: var(--accent); margin: 2.25rem 0 0.75rem; }
+    h2::before { content: "## "; color: var(--muted); }
+    h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
+    h3::before { content: "### "; color: var(--muted); }
+    h4 { font-size: 0.95rem; margin: 1.25rem 0 0.5rem; }
+    p { margin-bottom: 0.75rem; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img { vertical-align: middle; }
+    pre {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    code { background: var(--panel); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
+    pre code { background: none; padding: 0; font-size: inherit; }
+    ul, ol { padding-left: 1.4rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.35rem; }
+    ul { list-style: none; padding-left: 0.2rem; }
+    ul li::before { content: "▸ "; color: var(--accent); }
+    table {
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+      width: 100%;
+      font-size: 0.9rem;
+    }
+    th, td { border: 1px solid var(--border); padding: 0.4rem 0.75rem; text-align: left; }
+    th { background: var(--panel); color: var(--accent); }
+    details {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
+      margin-bottom: 1rem;
+    }
+    details[open] { padding-bottom: 1rem; }
+    summary { cursor: pointer; }
+    summary h2 { display: inline-block; margin: 0.5rem 0; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0 1.25rem; }
+  </style>
+</head>
+<body>
+  <main>
+<h1>Stint</h1>
+<blockquote>
+<p><strong>I forgot to start my timer for the 100th time. So I built one that doesn't need starting.</strong></p>
+</blockquote>
+<p><img src="https://img.shields.io/badge/status-alpha-yellow" alt="Status: Alpha" />
+<a href="https://github.com/DaltonR121/stint/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" /></a>
+<a href="https://crates.io/crates/stint-cli"><img src="https://img.shields.io/crates/v/stint-cli" alt="crates.io" /></a></p>
+<p>Stint is an open-source, local-first time tracker built in Rust. Its killer feature: <strong>automatic time tracking via shell hooks</strong>. Open a terminal in a project directory and the clock starts. Switch projects — it switches too. Close the last terminal — it stops. No buttons to click, no browser tabs to manage.</p>
+<p><strong>Works across multiple projects simultaneously</strong> — each terminal tracks its own project independently.</p>
+<h2>Why Stint?</h2>
+<p>Most developer time trackers require you to remember to start and stop timers. You forget, your data is wrong, and the tool becomes useless.</p>
+<p>Stint takes a different approach: it hooks into your shell prompt so tracking happens transparently as you work. You can also start/stop manually or add time retroactively — but the default path is zero friction.</p>
+<h2>Install</h2>
+<h3>One-liner (Linux &amp; macOS)</h3>
+<p>The install script detects your OS and package manager — on Debian/Ubuntu it sets up the apt repository for future upgrades, on other systems it downloads the binary from GitHub Releases.</p>
+<pre><code class="language-sh">curl -fsSL https://daltonr121.github.io/stint/install.sh | sudo sh
+</code></pre>
+<p>To inspect the script before running:</p>
+<pre><code class="language-sh">curl -fsSL https://daltonr121.github.io/stint/install.sh -o install.sh
+less install.sh
+sudo sh install.sh
+</code></pre>
+<h3>Other Methods</h3>
+<pre><code class="language-sh"># Rust developers
+cargo install stint-cli
+
+# Debian/Ubuntu — manual .deb
+curl -LO https://github.com/DaltonR121/stint/releases/latest/download/stint-x86_64-unknown-linux-gnu.deb
+sudo dpkg -i stint-x86_64-unknown-linux-gnu.deb
+
+# macOS (Apple Silicon)
+curl -LO https://github.com/DaltonR121/stint/releases/latest/download/stint-aarch64-apple-darwin.tar.gz
+tar xzf stint-aarch64-apple-darwin.tar.gz &amp;&amp; sudo mv stint /usr/local/bin/
+
+# From source
+git clone https://github.com/DaltonR121/stint.git &amp;&amp; cd stint
+cargo build --release &amp;&amp; sudo cp target/release/stint /usr/local/bin/
+</code></pre>
+<h3>VS Code Extension</h3>
+<p>Search <strong>"Stint"</strong> in the VS Code extension panel, or install from the <a href="https://marketplace.visualstudio.com/items?itemName=mosaic-ridge.stint-vscode">Marketplace</a>. The extension auto-starts the API server and shows your current project + timer in the status bar.</p>
+<h2>Quick Start</h2>
+<pre><code class="language-sh"># 1. Set up auto-tracking (one-time)
+stint init bash    # or: stint init zsh / stint init fish
+
+# 2. Restart your shell, then just work normally.
+#    Navigate to any git repo — tracking starts automatically.
+
+# Quick overview of your time
+stint summary
+
+# Detailed views
+stint status
+stint log --from "last monday"
+stint report --group-by project
+stint report --format csv &gt; timesheet.csv
+
+# Interactive dashboard
+stint dashboard
+
+# Local API server (used by VS Code extension)
+stint serve
+</code></pre>
+<h3>Registering Projects Manually</h3>
+<p>Auto-discovery handles most git repos, but you can register projects explicitly for custom names, tags, or hourly rates:</p>
+<pre><code class="language-sh">stint project add my-app --path ~/Projects/my-app --tags client,frontend --rate 150
+</code></pre>
+<h3>Manual Tracking</h3>
+<p>If you prefer explicit control (or haven't set up auto-tracking):</p>
+<pre><code class="language-sh">stint start my-app
+stint stop
+
+# Add time retroactively
+stint add my-app 2h30m --date yesterday --notes "Forgot to track"
+</code></pre>
+<h3>Importing Existing Data</h3>
+<p>Migrate from another time tracker with a CSV export:</p>
+<pre><code class="language-sh">stint import timesheet.csv
+</code></pre>
+<p>The CSV must have <code>project</code> and <code>start</code> columns. Optional: <code>end</code>, <code>duration_secs</code>, <code>notes</code>.</p>
+<h2>Features</h2>
+<ul>
+<li><strong>Zero-config auto-tracking</strong> — auto-discovers <code>.git</code> repos and tracks time via shell hooks, no manual setup needed</li>
+<li><strong>Multi-project support</strong> — track multiple projects simultaneously across different terminals</li>
+<li><strong>Manual tracking</strong> — <code>stint start</code>, <code>stint stop</code>, <code>stint status</code>, <code>stint add</code> for full control</li>
+<li><strong>One-command setup</strong> — <code>stint init bash|zsh|fish</code> installs the shell hook (recommended)</li>
+<li><strong>Multi-shell support</strong> — bash, zsh, and fish</li>
+<li><strong>Idle detection</strong> — configurable auto-pause (default 5 minutes), resumes on next prompt</li>
+<li><strong>Project management</strong> — register projects with paths, tags, and hourly rates; archive, delete, ignore</li>
+<li><strong>Rich reporting</strong> — grouped by project or tag, with table/CSV/JSON/Markdown export and earnings calculation</li>
+<li><strong>Quick summary</strong> — <code>stint summary</code> for a one-line overview of today and this week</li>
+<li><strong>Entry editing</strong> — <code>stint edit</code> and <code>stint delete-entry</code> to fix the most recent entry</li>
+<li><strong>CSV import</strong> — <code>stint import &lt;file.csv&gt;</code> for one-time migration from Toggl, Clockify, or any tracker</li>
+<li><strong>TUI dashboard</strong> — <code>stint dashboard</code> with live timer, today's entries, and weekly project totals</li>
+<li><strong>VS Code extension</strong> — shows current project and live timer in the status bar</li>
+<li><strong>Local API</strong> — <code>stint serve</code> provides a JSON API on localhost for editor plugins and integrations</li>
+<li><strong>Configurable</strong> — <code>~/.config/stint/config.toml</code> for idle threshold, default rate, default tags, and auto-discovery toggle</li>
+<li><strong>Local-first storage</strong> — SQLite with WAL mode, no account, no cloud, no telemetry</li>
+</ul>
+<details>
+<summary><h2>Command Reference</h2></summary>
+<h3>Tracking</h3>
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>stint start &lt;project&gt;</code></td><td>Start tracking time for a project</td></tr>
+<tr><td><code>stint stop</code></td><td>Stop the currently running timer</td></tr>
+<tr><td><code>stint status</code></td><td>Show what the current terminal is tracking</td></tr>
+<tr><td><code>stint summary</code></td><td>Quick overview of today and this week</td></tr>
+</tbody></table>
+<h3>Time Entries</h3>
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>stint add &lt;project&gt; &lt;duration&gt;</code></td><td>Add time retroactively</td></tr>
+<tr><td><code>stint log [--from --to --project --tag]</code></td><td>View time entries</td></tr>
+<tr><td><code>stint report [--group-by --format --from --to]</code></td><td>Generate grouped reports</td></tr>
+<tr><td><code>stint edit [--duration --notes]</code></td><td>Edit the most recent entry</td></tr>
+<tr><td><code>stint delete-entry [--force]</code></td><td>Delete the most recent entry</td></tr>
+<tr><td><code>stint import &lt;file.csv&gt;</code></td><td>Import entries from CSV</td></tr>
+</tbody></table>
+<h4><code>stint add</code> flags</h4>
+<ul>
+<li><code>-d, --date &lt;DATE&gt;</code> — date for the entry (e.g., "today", "yesterday", "2026-01-15")</li>
+<li><code>-n, --notes &lt;NOTES&gt;</code> — notes for the entry</li>
+</ul>
+<h4><code>stint log</code> flags</h4>
+<ul>
+<li><code>--from &lt;DATE&gt;</code> — start date filter (e.g., "today", "last monday", "2026-01-01")</li>
+<li><code>--to &lt;DATE&gt;</code> — end date filter</li>
+<li><code>-p, --project &lt;NAME&gt;</code> — filter by project</li>
+<li><code>-t, --tag &lt;TAG&gt;</code> — filter by tag (can be repeated)</li>
+</ul>
+<h4><code>stint report</code> flags</h4>
+<ul>
+<li><code>--group-by &lt;project|tag&gt;</code> — group results (default: project)</li>
+<li><code>--format &lt;table|markdown|csv|json&gt;</code> — output format (default: table)</li>
+<li><code>--from &lt;DATE&gt;</code> — start date filter</li>
+<li><code>--to &lt;DATE&gt;</code> — end date filter</li>
+<li><code>-p, --project &lt;NAME&gt;</code> — filter by project</li>
+<li><code>-t, --tag &lt;TAG&gt;</code> — filter by tag (can be repeated)</li>
+</ul>
+<h3>Projects</h3>
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>stint project add &lt;name&gt; [--path --tags --rate]</code></td><td>Register a new project</td></tr>
+<tr><td><code>stint project list [--all]</code></td><td>List registered projects</td></tr>
+<tr><td><code>stint project edit &lt;name&gt; [--rate --clear-rate --tags --rename]</code></td><td>Edit project settings</td></tr>
+<tr><td><code>stint project archive &lt;name&gt;</code></td><td>Archive a project</td></tr>
+<tr><td><code>stint project delete &lt;name&gt; [--force]</code></td><td>Delete a project and all entries</td></tr>
+<tr><td><code>stint project ignore &lt;path&gt;</code></td><td>Ignore a directory for auto-discovery</td></tr>
+<tr><td><code>stint project unignore &lt;path&gt;</code></td><td>Remove from ignore list</td></tr>
+</tbody></table>
+<h4><code>stint project add</code> flags</h4>
+<ul>
+<li><code>-p, --path &lt;PATH&gt;</code> — directory path for the project</li>
+<li><code>-t, --tags &lt;CSV&gt;</code> — comma-separated tags</li>
+<li><code>--rate &lt;DOLLARS&gt;</code> — hourly rate (e.g., 150.00)</li>
+</ul>
+<h4><code>stint project edit</code> flags</h4>
+<ul>
+<li><code>--rate &lt;DOLLARS&gt;</code> — set hourly rate</li>
+<li><code>--clear-rate</code> — remove hourly rate</li>
+<li><code>-t, --tags &lt;CSV&gt;</code> — set tags (replaces existing)</li>
+<li><code>--rename &lt;NAME&gt;</code> — rename the project</li>
+</ul>
+<h3>Setup &amp; Integration</h3>
+<table><thead><tr><th>Command</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>stint init &lt;bash|zsh|fish&gt;</code></td><td>Install shell hook in config file (recommended)</td></tr>
+<tr><td><code>stint shell &lt;bash|zsh|fish&gt;</code></td><td>Output hook script for manual eval</td></tr>
+<tr><td><code>stint dashboard</code></td><td>Open interactive TUI dashboard</td></tr>
+<tr><td><code>stint serve [--port]</code></td><td>Start local HTTP API server (default port: 7653)</td></tr>
+</tbody></table>
+<h3>Duration Format</h3>
+<p>Durations use human-friendly syntax: <code>2h30m</code>, <code>45m</code>, <code>1h</code>, <code>90s</code>, <code>1h30m15s</code></p>
+<h3>Date Format</h3>
+<p>Dates support: <code>today</code>, <code>yesterday</code>, <code>last monday</code>, <code>last fri</code>, or ISO format <code>2026-01-15</code></p>
+</details>
+<h2>Configuration</h2>
+<p>Stint reads optional configuration from <code>~/.config/stint/config.toml</code>:</p>
+<pre><code class="language-toml"># Idle detection threshold in seconds (default: 300 = 5 minutes)
+idle_threshold = 300
+
+# Default hourly rate in cents for auto-discovered projects (e.g., 15000 = $150/hr)
+# default_rate = 15000
+
+# Enable/disable .git auto-discovery (default: true)
+auto_discover = true
+
+# Default tags applied to auto-discovered projects
+# default_tags = "rust, cli"
+</code></pre>
+<p>Environment variable overrides for the hook (no file I/O):</p>
+<ul>
+<li><code>STINT_IDLE_THRESHOLD=600</code> — override idle threshold (seconds)</li>
+<li><code>STINT_NO_DISCOVER=1</code> — disable auto-discovery</li>
+</ul>
+<h2>How It Works</h2>
+<p>Stint installs a shell hook that fires on every prompt render. The hook calls a fast-path subcommand (<code>stint _hook</code>) that:</p>
+<ol>
+<li>Checks your current directory against registered project paths and <code>.git</code> repos</li>
+<li>Compares the detected project to the last-known context for your shell session</li>
+<li>Starts, stops, or switches timers as needed</li>
+<li>Detects idle gaps and trims them from tracked time</li>
+</ol>
+<p>The hook is engineered to execute in <strong>under 2 milliseconds</strong> — you won't notice it.</p>
+<h3>Multi-Terminal / Multi-Project</h3>
+<p>Each terminal tracks independently. If you have one terminal in <code>/Projects/stint</code> and another in <code>/Projects/client-app</code>, both projects are tracked simultaneously with separate timers. Within a single project, merge mode keeps one timer regardless of how many terminals are open — the timer only stops when the last terminal leaves.</p>
+<h3>Data Storage</h3>
+<p>All data lives locally in <code>~/.local/share/stint/stint.db</code> (SQLite, XDG-compliant). No account, no cloud, no telemetry. Your data stays on your machine.</p>
+<h3>Local API</h3>
+<p><code>stint serve</code> starts a JSON API on <code>http://127.0.0.1:7653</code> with endpoints for status, entries, projects, start, and stop. The VS Code extension uses this automatically. See <code>stint serve --help</code> for options.</p>
+<h2>Roadmap</h2>
+<table><thead><tr><th>Phase</th><th>Milestone</th><th>Status</th></tr></thead><tbody>
+<tr><td>0 — Foundation</td><td>Project scaffolding, data model, CI</td><td>Done</td></tr>
+<tr><td>1 — Core CLI</td><td>Manual time tracking, reporting, export</td><td>Done</td></tr>
+<tr><td>2 — Auto-Tracking</td><td>Shell hooks, idle detection, multi-terminal</td><td>Done</td></tr>
+<tr><td>3 — TUI + v0.1.0</td><td>Interactive dashboard, first public release</td><td>Done</td></tr>
+<tr><td>4 — Zero-Config</td><td>Auto-discovery, config, import, entry editing</td><td>Done</td></tr>
+<tr><td>5 — API + Distribution</td><td>Local API, VS Code extension, apt repo, crates.io</td><td>Done</td></tr>
+<tr><td><strong>6 — Cloud + Web</strong></td><td>Optional hosted sync, web dashboard</td><td><strong>Up Next</strong></td></tr>
+</tbody></table>
+<p>See <a href="https://github.com/DaltonR121/stint/blob/main/CHANGELOG.md">CHANGELOG.md</a> for release history.</p>
+<h2>Who Is This For?</h2>
+<ul>
+<li><strong>Freelance developers</strong> tracking billable hours across client projects</li>
+<li><strong>Solo/indie developers</strong> who want to understand where their time goes</li>
+<li><strong>Team developers</strong> reporting time to project management systems</li>
+</ul>
+<h2>Project Structure</h2>
+<pre><code>stint/
+  Cargo.toml                # Workspace root
+  crates/
+    stint-core/             # Domain logic, storage, data models, services
+    stint-cli/              # CLI commands, TUI dashboard, user interaction
+    stint-server/           # Local HTTP API server (axum)
+  editors/
+    vscode/                 # VS Code extension (TypeScript)
+</code></pre>
+<h2>Contributing</h2>
+<p>Stint is solo-maintained by <a href="https://github.com/DaltonR121">Ryan Dalton</a>. Bug reports and feature requests are welcome — pull requests are not. See <a href="https://github.com/DaltonR121/stint/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a> for details.</p>
+<p>The MIT license means you're free to fork and build your own version.</p>
+<h2>Security</h2>
+<p>Found a vulnerability? Please report it responsibly. See <a href="https://github.com/DaltonR121/stint/blob/main/SECURITY.md">SECURITY.md</a> for details.</p>
+<h2>License</h2>
+<p>Stint is licensed under the <a href="https://github.com/DaltonR121/stint/blob/main/LICENSE">MIT License</a>.</p>
+<hr />
+<p>Built by <a href="https://github.com/DaltonR121">Ryan Dalton</a> / <a href="https://mosaicridge.com">Mosaic Ridge LLC</a></p>
+
+  </main>
+</body>
+</html>
