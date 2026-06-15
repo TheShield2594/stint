@@ -234,6 +234,11 @@ enum Commands {
         /// Signal that the shell is exiting.
         #[arg(long)]
         exit: bool,
+
+        /// Session ID from the cold-start hook call, used to avoid closing the
+        /// wrong session when PIDs are reused before the exit hook fires.
+        #[arg(long)]
+        session_id: Option<String>,
     },
 }
 
@@ -1095,11 +1100,14 @@ fn cmd_project_unignore(path: PathBuf) {
 
 /// Handles the `_hook` command (called by shell hooks).
 ///
-/// Must never call process::exit or print to stdout/stderr — the hook
-/// must be invisible to the user's shell. Uses open_existing to skip
-/// directory creation and migrations for <2ms performance.
-/// Config is loaded only if the file exists to avoid unnecessary I/O.
-fn cmd_hook(cwd: PathBuf, pid: u32, shell: Option<String>, exit: bool) {
+/// On a cold start (session creation), prints the session ID to stdout so the
+/// shell script can capture it and pass it back via `--session-id` on exit.
+/// This prevents PID reuse from causing the exit hook to close a new session
+/// that inherited the same PID before the exit hook fired.
+///
+/// Uses open_existing to skip directory creation and migrations for <2ms
+/// performance. Config is loaded only if the file exists to avoid I/O.
+fn cmd_hook(cwd: PathBuf, pid: u32, shell: Option<String>, exit: bool, session_id: Option<String>) {
     let path = SqliteStorage::default_path();
     let storage = match SqliteStorage::open_existing(&path) {
         Ok(s) => s,
@@ -1118,9 +1126,21 @@ fn cmd_hook(cwd: PathBuf, pid: u32, shell: Option<String>, exit: bool) {
         config.auto_discover = false;
     }
     if exit {
-        let _ = hook::handle_hook_exit(&storage, pid, &config);
+        let sid = session_id.and_then(|s| s.parse::<stint_core::models::types::SessionId>().ok());
+        let _ = hook::handle_hook_exit(&storage, pid, sid.as_ref(), &config);
     } else {
-        let _ = hook::handle_hook(&storage, pid, &cwd, shell.as_deref(), &config);
+        use hook::HookAction;
+        // On cold start, emit the session ID so the shell can store it and
+        // pass it back to the exit hook, guarding against PID reuse.
+        if let Ok(
+            HookAction::SessionCreated { session_id: sid }
+            | HookAction::SessionStarted {
+                session_id: sid, ..
+            },
+        ) = hook::handle_hook(&storage, pid, &cwd, shell.as_deref(), &config)
+        {
+            println!("{}", sid.as_str());
+        }
     }
 }
 
@@ -1129,10 +1149,12 @@ fn cmd_shell(shell: String) {
     let script = match shell.to_lowercase().as_str() {
         "bash" => {
             r#"_stint_hook() {
-    stint _hook --cwd "$PWD" --pid $$ --shell bash
+    local _id
+    _id=$(stint _hook --cwd "$PWD" --pid $$ --shell bash 2>/dev/null)
+    [[ -n "$_id" ]] && STINT_SESSION_ID="$_id"
 }
 _stint_exit() {
-    stint _hook --cwd "$PWD" --pid $$ --shell bash --exit
+    stint _hook --cwd "$PWD" --pid $$ --shell bash --exit${STINT_SESSION_ID:+ --session-id "$STINT_SESSION_ID"}
 }
 PROMPT_COMMAND="_stint_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 trap '_stint_exit' EXIT
@@ -1140,10 +1162,12 @@ trap '_stint_exit' EXIT
         }
         "zsh" => {
             r#"_stint_hook() {
-    stint _hook --cwd "$PWD" --pid $$ --shell zsh
+    local _id
+    _id=$(stint _hook --cwd "$PWD" --pid $$ --shell zsh 2>/dev/null)
+    [[ -n "$_id" ]] && STINT_SESSION_ID="$_id"
 }
 _stint_exit() {
-    stint _hook --cwd "$PWD" --pid $$ --shell zsh --exit
+    stint _hook --cwd "$PWD" --pid $$ --shell zsh --exit${STINT_SESSION_ID:+ --session-id "$STINT_SESSION_ID"}
 }
 precmd_functions+=(_stint_hook)
 zshexit_functions+=(_stint_exit)
@@ -1151,10 +1175,17 @@ zshexit_functions+=(_stint_exit)
         }
         "fish" => {
             r#"function _stint_hook --on-event fish_prompt
-    stint _hook --cwd "$PWD" --pid %self --shell fish
+    set -l _id (stint _hook --cwd "$PWD" --pid %self --shell fish 2>/dev/null)
+    if test -n "$_id"
+        set -gx STINT_SESSION_ID $_id
+    end
 end
 function _stint_exit --on-event fish_exit
-    stint _hook --cwd "$PWD" --pid %self --shell fish --exit
+    if set -q STINT_SESSION_ID
+        stint _hook --cwd "$PWD" --pid %self --shell fish --exit --session-id "$STINT_SESSION_ID"
+    else
+        stint _hook --cwd "$PWD" --pid %self --shell fish --exit
+    end
 end
 "#
         }
@@ -1302,6 +1333,7 @@ fn main() {
             pid,
             shell,
             exit,
-        } => cmd_hook(cwd, pid, shell, exit),
+            session_id,
+        } => cmd_hook(cwd, pid, shell, exit, session_id),
     }
 }

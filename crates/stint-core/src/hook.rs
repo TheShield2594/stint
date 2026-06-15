@@ -33,9 +33,12 @@ pub enum HookAction {
     /// Stopped tracking (left project directory).
     Stopped { project_name: String },
     /// New session created, no project detected.
-    SessionCreated,
+    SessionCreated { session_id: SessionId },
     /// New session created and started tracking.
-    SessionStarted { project_name: String },
+    SessionStarted {
+        project_name: String,
+        session_id: SessionId,
+    },
     /// Idle gap detected; previous entry stopped at last heartbeat, new one started.
     IdleResume { project_name: String },
 }
@@ -94,9 +97,12 @@ fn handle_cold_start(
             try_create_hook_entry(storage, &project.id, &session.id, now)?;
             Ok(HookAction::SessionStarted {
                 project_name: project.name,
+                session_id: session.id,
             })
         }
-        None => Ok(HookAction::SessionCreated),
+        None => Ok(HookAction::SessionCreated {
+            session_id: session.id,
+        }),
     }
 }
 
@@ -199,17 +205,31 @@ fn handle_warm_path(
 
 /// Handles shell exit: ends the session and conditionally stops the timer.
 ///
+/// `session_id` should be the ID emitted by this shell's cold-start hook call.
+/// When provided it is used directly, preventing PID-reuse from accidentally
+/// closing a new session that inherited this PID. Falls back to a PID lookup
+/// when `session_id` is `None` (e.g. older shell script integrations).
+///
 /// In merge mode, the entry is only stopped if no other active sessions
 /// share the same project. If the session was idle at exit, clamps the
 /// stop time to last_heartbeat to avoid counting idle time.
 pub fn handle_hook_exit(
     storage: &impl Storage,
     pid: u32,
+    session_id: Option<&SessionId>,
     config: &StintConfig,
 ) -> Result<(), StintError> {
-    let session = match storage.get_session_by_pid(pid)? {
-        Some(s) => s,
-        None => return Ok(()), // No active session for this PID
+    let session = match session_id {
+        Some(id) => match storage.get_session(id)? {
+            // Only act if the session is still active; if it's already ended
+            // (e.g. reaped as stale), there's nothing to do.
+            Some(s) if s.ended_at.is_none() => s,
+            _ => return Ok(()),
+        },
+        None => match storage.get_session_by_pid(pid)? {
+            Some(s) => s,
+            None => return Ok(()), // No active session for this PID
+        },
     };
 
     let now = OffsetDateTime::now_utc();
@@ -488,7 +508,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(action, HookAction::SessionCreated);
+        assert!(matches!(action, HookAction::SessionCreated { .. }));
 
         let session = storage.get_session_by_pid(1234).unwrap().unwrap();
         assert!(session.current_project_id.is_none());
@@ -683,7 +703,7 @@ mod tests {
         .unwrap();
 
         // Shell exits
-        handle_hook_exit(&storage, 1234, &test_config()).unwrap();
+        handle_hook_exit(&storage, 1234, None, &test_config()).unwrap();
 
         // Manual entry should still be running
         let loaded = storage.get_entry(&manual_entry.id).unwrap().unwrap();
@@ -710,7 +730,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(action, HookAction::SessionCreated);
+        assert!(matches!(action, HookAction::SessionCreated { .. }));
         assert!(storage.get_any_running_entry().unwrap().is_none());
     }
 
@@ -729,7 +749,35 @@ mod tests {
         .unwrap();
         assert!(storage.get_any_running_entry().unwrap().is_some());
 
-        handle_hook_exit(&storage, 1234, &test_config()).unwrap();
+        handle_hook_exit(&storage, 1234, None, &test_config()).unwrap();
+
+        // Session should be ended
+        assert!(storage.get_session_by_pid(1234).unwrap().is_none());
+
+        // Entry should be stopped
+        assert!(storage.get_any_running_entry().unwrap().is_none());
+    }
+
+    #[test]
+    fn exit_with_session_id_ends_session_and_stops_entry() {
+        let storage = setup();
+        create_project(&storage, "my-app", "/home/user/my-app");
+
+        let action = handle_hook(
+            &storage,
+            1234,
+            Path::new("/home/user/my-app"),
+            None,
+            &test_config(),
+        )
+        .unwrap();
+
+        let session_id = match action {
+            HookAction::SessionStarted { session_id, .. } => session_id,
+            _ => panic!("expected SessionStarted"),
+        };
+
+        handle_hook_exit(&storage, 1234, Some(&session_id), &test_config()).unwrap();
 
         // Session should be ended
         assert!(storage.get_session_by_pid(1234).unwrap().is_none());
@@ -768,13 +816,13 @@ mod tests {
         assert_eq!(running.len(), 1);
 
         // First shell exits
-        handle_hook_exit(&storage, 1111, &test_config()).unwrap();
+        handle_hook_exit(&storage, 1111, None, &test_config()).unwrap();
 
         // Entry should still be running (shell 2222 still active)
         assert!(storage.get_any_running_entry().unwrap().is_some());
 
         // Second shell exits
-        handle_hook_exit(&storage, 2222, &test_config()).unwrap();
+        handle_hook_exit(&storage, 2222, None, &test_config()).unwrap();
 
         // Now the entry should be stopped
         assert!(storage.get_any_running_entry().unwrap().is_none());
@@ -825,7 +873,7 @@ mod tests {
     fn exit_with_no_session_is_noop() {
         let storage = setup();
         // Should not error
-        handle_hook_exit(&storage, 9999, &test_config()).unwrap();
+        handle_hook_exit(&storage, 9999, None, &test_config()).unwrap();
     }
 
     #[test]
@@ -995,7 +1043,7 @@ mod tests {
 
         let action = handle_hook(&storage, 1234, &project_dir, None, &test_config()).unwrap();
 
-        assert_eq!(action, HookAction::SessionCreated);
+        assert!(matches!(action, HookAction::SessionCreated { .. }));
         assert!(storage.get_project_by_name("dotfiles").unwrap().is_none());
     }
 

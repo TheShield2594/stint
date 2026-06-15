@@ -336,10 +336,8 @@ impl SqliteStorage {
 
         let status = ProjectStatus::from_str_value(&status_str).unwrap_or(ProjectStatus::Active);
         let source = ProjectSource::from_str_value(&source_str);
-        let created_at =
-            OffsetDateTime::parse(&created_at_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
-        let updated_at =
-            OffsetDateTime::parse(&updated_at_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
+        let created_at = Self::parse_ts(&created_at_str)?;
+        let updated_at = Self::parse_ts(&updated_at_str)?;
 
         Ok(Project {
             id: ProjectId::from_storage(id),
@@ -374,14 +372,11 @@ impl SqliteStorage {
         let created_at_str: String = row.get("created_at")?;
         let updated_at_str: String = row.get("updated_at")?;
 
-        let start =
-            OffsetDateTime::parse(&start_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
-        let end = end_str.and_then(|s| OffsetDateTime::parse(&s, &Rfc3339).ok());
+        let start = Self::parse_ts(&start_str)?;
+        let end = end_str.map(|s| Self::parse_ts(&s)).transpose()?;
         let source = EntrySource::from_str_value(&source_str).unwrap_or(EntrySource::Manual);
-        let created_at =
-            OffsetDateTime::parse(&created_at_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
-        let updated_at =
-            OffsetDateTime::parse(&updated_at_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
+        let created_at = Self::parse_ts(&created_at_str)?;
+        let updated_at = Self::parse_ts(&updated_at_str)?;
 
         Ok(TimeEntry {
             id: EntryId::from_storage(id),
@@ -415,11 +410,9 @@ impl SqliteStorage {
         let heartbeat_str: String = row.get("last_heartbeat")?;
         let ended_at_str: Option<String> = row.get("ended_at")?;
 
-        let started_at =
-            OffsetDateTime::parse(&started_at_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
-        let last_heartbeat =
-            OffsetDateTime::parse(&heartbeat_str, &Rfc3339).unwrap_or(OffsetDateTime::UNIX_EPOCH);
-        let ended_at = ended_at_str.and_then(|s| OffsetDateTime::parse(&s, &Rfc3339).ok());
+        let started_at = Self::parse_ts(&started_at_str)?;
+        let last_heartbeat = Self::parse_ts(&heartbeat_str)?;
+        let ended_at = ended_at_str.map(|s| Self::parse_ts(&s)).transpose()?;
 
         Ok(ShellSession {
             id: SessionId::from_storage(id),
@@ -436,6 +429,16 @@ impl SqliteStorage {
     /// Formats an OffsetDateTime as RFC 3339 for storage.
     fn fmt_ts(ts: &OffsetDateTime) -> String {
         ts.format(&Rfc3339).unwrap_or_default()
+    }
+
+    /// Parses an RFC 3339 timestamp string, returning a rusqlite error on failure.
+    ///
+    /// Propagates the error rather than silently falling back to UNIX_EPOCH,
+    /// which would cause idle detection to calculate a ~55-year gap.
+    fn parse_ts(raw: &str) -> Result<OffsetDateTime, rusqlite::Error> {
+        OffsetDateTime::parse(raw, &Rfc3339).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+        })
     }
 }
 
