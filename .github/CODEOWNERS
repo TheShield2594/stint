@@ -1,0 +1,10 @@
+# Code owners for stint.
+#
+# Listed owners are automatically requested for review on any pull request
+# that touches matching paths. See:
+# https://docs.github.com/en/repositories/managing-your-repos-settings-and-features/customizing-your-repository/about-code-owners
+#
+# stint is maintained by Ryan Dalton (BDFL). Everything is owned by @DaltonR121
+# so every PR routes a review request his way.
+
+* @DaltonR121
