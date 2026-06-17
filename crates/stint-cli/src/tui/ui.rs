@@ -12,19 +12,25 @@ use super::app::{App, Panel};
 
 /// Renders the entire dashboard.
 pub fn render(frame: &mut Frame, app: &App) {
-    // 4-panel layout: Header, Main (Today | Timeline | Week), Footer
+    let extra_rows = if app.error_message.is_some() { 1 } else { 0 };
+
+    // 4-panel layout: Header, (optional error bar), Main, Footer
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3), // Header
-            Constraint::Min(5),    // Main area
-            Constraint::Length(3), // Footer
+            Constraint::Length(3),          // Header
+            Constraint::Length(extra_rows), // Error bar (0 or 1)
+            Constraint::Min(5),             // Main area
+            Constraint::Length(3),          // Footer
         ])
         .split(frame.area());
 
     render_header(frame, app, chunks[0]);
-    render_main(frame, app, chunks[1]);
-    render_footer(frame, chunks[2]);
+    if extra_rows > 0 {
+        render_error_bar(frame, app, chunks[1]);
+    }
+    render_main(frame, app, chunks[2]);
+    render_footer(frame, chunks[3]);
 }
 
 /// Renders the header bar with current timer status.
@@ -57,6 +63,22 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
             .title_style(Style::default().add_modifier(Modifier::BOLD)),
     );
     frame.render_widget(header, area);
+}
+
+/// Renders a red error bar below the header when a database error occurs.
+fn render_error_bar(frame: &mut Frame, app: &App, area: Rect) {
+    let text = match &app.error_message {
+        Some(msg) => format!("  ⚠ DB error: {msg}"),
+        None => return,
+    };
+
+    let bar = Paragraph::new(Line::from(vec![Span::styled(
+        text,
+        Style::default()
+            .fg(Color::Red)
+            .add_modifier(Modifier::BOLD),
+    )]));
+    frame.render_widget(bar, area);
 }
 
 /// Renders the main content area with today's entries, timeline, and week totals.

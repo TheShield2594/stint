@@ -70,6 +70,8 @@ pub struct App {
     pub timeline_view: TimelineView,
     /// Whether the app should quit.
     pub should_quit: bool,
+    /// Error message from the last refresh, if any. Displayed in the header bar.
+    pub error_message: Option<String>,
 }
 
 impl App {
@@ -88,6 +90,7 @@ impl App {
             week_scroll: 0,
             timeline_view: TimelineView::Today,
             should_quit: false,
+            error_message: None,
         };
         app.refresh();
         app
@@ -96,6 +99,9 @@ impl App {
     /// Refreshes all dashboard data from the database.
     pub fn refresh(&mut self) {
         let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());
+
+        // Clear any previous error
+        self.error_message = None;
 
         // Running timer
         self.running_timer = self.service.get_status().unwrap_or(None);
@@ -106,7 +112,13 @@ impl App {
             from: Some(today_start),
             ..Default::default()
         };
-        self.today_entries = self.service.get_entries(&today_filter).unwrap_or_default();
+        match self.service.get_entries(&today_filter) {
+            Ok(entries) => self.today_entries = entries,
+            Err(e) => {
+                self.today_entries = vec![];
+                self.error_message = Some(format!("Today: {e}"));
+            }
+        }
 
         // Yesterday's entries
         let yesterday_start = today_start - time::Duration::days(1);
@@ -115,10 +127,17 @@ impl App {
             to: Some(today_start),
             ..Default::default()
         };
-        self.yesterday_entries = self
-            .service
-            .get_entries(&yesterday_filter)
-            .unwrap_or_default();
+        match self.service.get_entries(&yesterday_filter) {
+            Ok(entries) => self.yesterday_entries = entries,
+            Err(e) => {
+                self.yesterday_entries = vec![];
+                let msg = format!("Yesterday: {e}");
+                self.error_message = Some(match &self.error_message {
+                    Some(prev) => format!("{prev}; {msg}"),
+                    None => msg,
+                });
+            }
+        }
 
         // This week's totals (Monday to now)
         let weekday = now.weekday().number_days_from_monday();
@@ -127,18 +146,27 @@ impl App {
             from: Some(week_start),
             ..Default::default()
         };
-        let week_entries = self.service.get_entries(&week_filter).unwrap_or_default();
-
-        // Aggregate by project
-        let mut totals: std::collections::BTreeMap<String, i64> = std::collections::BTreeMap::new();
-        for (entry, project) in &week_entries {
-            let duration = entry.computed_duration_secs().unwrap_or(0);
-            *totals.entry(project.name.clone()).or_insert(0) += duration;
+        match self.service.get_entries(&week_filter) {
+            Ok(week_entries) => {
+                let mut totals: std::collections::BTreeMap<String, i64> =
+                    std::collections::BTreeMap::new();
+                for (entry, project) in &week_entries {
+                    let duration = entry.computed_duration_secs().unwrap_or(0);
+                    *totals.entry(project.name.clone()).or_insert(0) += duration;
+                }
+                self.week_totals = totals.into_iter().collect();
+                self.week_totals
+                    .sort_by_key(|(_, total)| std::cmp::Reverse(*total));
+            }
+            Err(e) => {
+                self.week_totals = vec![];
+                let msg = format!("Week: {e}");
+                self.error_message = Some(match &self.error_message {
+                    Some(prev) => format!("{prev}; {msg}"),
+                    None => msg,
+                });
+            }
         }
-        self.week_totals = totals.into_iter().collect();
-        // Sort by total descending
-        self.week_totals
-            .sort_by_key(|(_, total)| std::cmp::Reverse(*total));
     }
 
     /// Scrolls the focused panel up.

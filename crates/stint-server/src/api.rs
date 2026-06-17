@@ -19,6 +19,10 @@ use stint_core::storage::Storage;
 /// Shared application state.
 pub type AppState = Arc<Mutex<StintService<SqliteStorage>>>;
 
+/// Maximum number of entries the API will return in a single request.
+/// Prevents memory exhaustion on large databases.
+const MAX_LIMIT: usize = 10_000;
+
 // --- Response DTOs ---
 
 /// Response for GET /api/status.
@@ -175,7 +179,7 @@ pub async fn entries(
 
     match service.get_entries(&filter) {
         Ok(entries) => {
-            let limit = query.limit.unwrap_or(entries.len());
+            let limit = query.limit.unwrap_or(entries.len()).min(MAX_LIMIT);
             let responses: Vec<EntryResponse> = entries
                 .into_iter()
                 .take(limit)

@@ -16,7 +16,7 @@ use super::Storage;
 
 /// Current schema version. Increment when adding migrations.
 #[cfg(test)]
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 /// SQLite-backed storage for Stint.
 pub struct SqliteStorage {
@@ -103,6 +103,9 @@ impl SqliteStorage {
         }
         if current_version < 3 {
             self.migrate_v3()?;
+        }
+        if current_version < 4 {
+            self.migrate_v4()?;
         }
 
         Ok(())
@@ -228,6 +231,18 @@ impl SqliteStorage {
 
         self.conn.execute_batch(
             "INSERT OR REPLACE INTO _stint_meta (key, value) VALUES ('schema_version', '3');",
+        )?;
+
+        Ok(())
+    }
+
+    /// Migration v4: add index on ignored_paths.path for fast hook lookups.
+    fn migrate_v4(&self) -> Result<(), StorageError> {
+        self.conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_ignored_paths_path
+                ON ignored_paths(path);
+
+            INSERT OR REPLACE INTO _stint_meta (key, value) VALUES ('schema_version', '4');",
         )?;
 
         Ok(())
