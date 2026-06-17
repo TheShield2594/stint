@@ -223,7 +223,9 @@ pub fn handle_hook_exit(
         Some(id) => match storage.get_session(id)? {
             // Only act if the session is still active; if it's already ended
             // (e.g. reaped as stale), there's nothing to do.
-            Some(s) if s.ended_at.is_none() => s,
+            // Also verify the session's PID matches to prevent a stale or
+            // inherited STINT_SESSION_ID from closing another shell's session.
+            Some(s) if s.ended_at.is_none() && s.pid == pid => s,
             _ => return Ok(()),
         },
         None => match storage.get_session_by_pid(pid)? {
@@ -784,6 +786,35 @@ mod tests {
 
         // Entry should be stopped
         assert!(storage.get_any_running_entry().unwrap().is_none());
+    }
+
+    #[test]
+    fn exit_with_session_id_wrong_pid_is_noop() {
+        let storage = setup();
+        create_project(&storage, "my-app", "/home/user/my-app");
+
+        let action = handle_hook(
+            &storage,
+            1234,
+            Path::new("/home/user/my-app"),
+            None,
+            &test_config(),
+        )
+        .unwrap();
+
+        let session_id = match action {
+            HookAction::SessionStarted { session_id, .. } => session_id,
+            _ => panic!("expected SessionStarted"),
+        };
+
+        // Call exit with a different PID — should be a no-op
+        handle_hook_exit(&storage, 9999, Some(&session_id), &test_config()).unwrap();
+
+        // Session should still be active
+        assert!(storage.get_session_by_pid(1234).unwrap().is_some());
+
+        // Entry should still be running
+        assert!(storage.get_any_running_entry().unwrap().is_some());
     }
 
     #[test]
