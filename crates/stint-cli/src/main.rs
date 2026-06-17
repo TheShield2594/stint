@@ -1126,8 +1126,17 @@ fn cmd_hook(cwd: PathBuf, pid: u32, shell: Option<String>, exit: bool, session_i
         config.auto_discover = false;
     }
     if exit {
-        let sid = session_id.and_then(|s| s.parse::<stint_core::models::types::SessionId>().ok());
-        let _ = hook::handle_hook_exit(&storage, pid, sid.as_ref(), &config);
+        // Distinguish between "no session-id provided" (PID fallback is fine)
+        // and "session-id provided but malformed" (skip entirely to avoid
+        // accidentally closing another session via stale/invalid session IDs).
+        if let Some(ref raw) = session_id {
+            if let Ok(sid) = raw.parse::<stint_core::models::types::SessionId>() {
+                let _ = hook::handle_hook_exit(&storage, pid, Some(&sid), &config);
+            }
+            // else: explicitly provided but invalid — skip to avoid PID fallback
+        } else {
+            let _ = hook::handle_hook_exit(&storage, pid, None, &config);
+        }
     } else {
         use hook::HookAction;
         // On cold start, emit the session ID so the shell can store it and
@@ -1177,7 +1186,7 @@ zshexit_functions+=(_stint_exit)
             r#"function _stint_hook --on-event fish_prompt
     set -l _id (stint _hook --cwd "$PWD" --pid %self --shell fish 2>/dev/null)
     if test -n "$_id"
-        set -gx STINT_SESSION_ID $_id
+        set -g STINT_SESSION_ID $_id
     end
 end
 function _stint_exit --on-event fish_exit
